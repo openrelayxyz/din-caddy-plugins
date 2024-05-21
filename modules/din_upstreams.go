@@ -6,6 +6,7 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
+	"github.com/openrelayxyz/din-caddy-plugins/auth/eip4361"
 )
 
 var (
@@ -25,6 +26,11 @@ type upstreamWrapper struct {
 	Headers  map[string]string
 	upstream *reverseproxy.Upstream
 	Priority int
+	Auth     *eip4361.EIP4361ClientAuth
+}
+
+func (u *upstreamWrapper) Available() bool {
+	return u.upstream.Available() && (u.Auth == nil || u.Auth.Error() == nil)
 }
 
 // CaddyModule returns the Caddy module information.
@@ -50,7 +56,7 @@ func (d *DinUpstreams) GetUpstreams(r *http.Request) ([]*reverseproxy.Upstream, 
 	// Select upstream based on priority. If no upstreams are available, pass along all upstreams
 	for priority := 0; priority < len(upstreamWrappers); priority++ {
 		for _, u := range upstreamWrappers {
-			if u.Priority == priority && u.upstream.Available() {
+			if u.Priority == priority && u.Available() {
 				res = append(res, u.upstream)
 			}
 		}
