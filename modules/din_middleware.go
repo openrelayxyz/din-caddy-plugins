@@ -53,6 +53,7 @@ func (d *DinMiddleware) Provision(context caddy.Context) error {
 			// upstreamWrapper.upstream = &reverseproxy.Upstream{Dial: fmt.Sprintf("%v://%v", url.Scheme, url.Host)}
 			upstreamWrapper.upstream = &reverseproxy.Upstream{Dial: url.Host}
 			upstreamWrapper.path = url.Path
+			upstreamWrapper.StartHealthchecks()
 		}
 	}
 	return nil
@@ -126,7 +127,23 @@ func (d *DinMiddleware) UnmarshalCaddyfile(dispenser *caddyfile.Dispenser) error
 									if err != nil {
 										return err
 									}
+								case "healthcheck_method":
+									dispenser.NextBlock(nesting + 2)
+									ms.HCRPCMethod = dispenser.Val()
+								case "healthcheck_threshold":
+									dispenser.NextBlock(nesting + 2)
+									ms.HCThreshold, err = strconv.Atoi(dispenser.Val())
+									if err != nil {
+										return err
+									}
+								case "healthcheck_interval":
+									dispenser.NextBlock(nesting + 2)
+									ms.HCInterval, err = strconv.Atoi(dispenser.Val())
+									if err != nil {
+										return err
+									}
 								}
+
 							}
 							d.Services[serviceName] = append(d.Services[serviceName], ms)
 						}
@@ -155,6 +172,11 @@ func urlToUpstreamWrapper(urlstr string) (*upstreamWrapper, error) {
 		Headers: make(map[string]string),
 		// upstream: &reverseproxy.Upstream{Dial: fmt.Sprintf("%v://%v", url.Scheme, url.Host)},
 		upstream: &reverseproxy.Upstream{Dial: url.Host},
+
+		// Default values, to be overridden if specified in the Caddyfile
+		HCRPCMethod: "eth_blockNumber",
+		HCThreshold: 2,
+		HCInterval: 5,
 	}, nil
 }
 
