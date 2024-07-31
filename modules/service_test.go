@@ -303,7 +303,7 @@ func TestHealthCheck(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockHttpClient.EXPECT().Post(gomock.Any(), gomock.Any(), gomock.Any()).Return(tt.latestBlockResponse.postResponseBytes, &tt.latestBlockResponse.statusCode, tt.latestBlockResponse.err).Times(len(tt.service.Providers))
+			mockHttpClient.EXPECT().Post(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(tt.latestBlockResponse.postResponseBytes, &tt.latestBlockResponse.statusCode, tt.latestBlockResponse.err).Times(len(tt.service.Providers))
 
 			tt.service.healthCheck()
 

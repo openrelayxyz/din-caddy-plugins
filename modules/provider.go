@@ -4,15 +4,20 @@ import (
 	"net/url"
 
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
+	din_http "github.com/openrelayxyz/din-caddy-plugins/lib/http"
+	"github.com/openrelayxyz/din-caddy-plugins/auth/eip4361"
+	"github.com/openrelayxyz/din-caddy-plugins/auth"
 )
 
 type provider struct {
-	HttpUrl  string `json:"http.url"`
-	path     string
-	host     string
-	Headers  map[string]string
-	upstream *reverseproxy.Upstream
-	Priority int
+	HttpUrl    string `json:"http.url"`
+	path       string
+	host       string
+	Headers    map[string]string
+	upstream   *reverseproxy.Upstream
+	httpClient *din_http.HTTPClient
+	Priority   int
+	Auth       *eip4361.EIP4361ClientAuth
 
 	failures     int
 	successes    int
@@ -41,6 +46,13 @@ func (p *provider) Available() bool {
 
 func (p *provider) IsAvailableWithWarning() bool {
 	return p.upstream.Available() && p.Warning()
+}
+
+func (p *provider) AuthClient() auth.AuthClient {
+	if p.Auth == nil {
+		return nil
+	}
+	return p.Auth
 }
 
 // markPingFailure records the failure, and if the failure count exceeds the healthcheck threshold

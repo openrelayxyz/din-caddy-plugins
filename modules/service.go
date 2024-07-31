@@ -9,6 +9,7 @@ import (
 	"time"
 
 	din_http "github.com/openrelayxyz/din-caddy-plugins/lib/http"
+	"github.com/openrelayxyz/din-caddy-plugins/auth"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +61,7 @@ func (s *service) healthCheck() {
 	// TODO: check all of the providers simultaneously using async job management for more accurate blocknumber results.
 	for _, provider := range s.Providers {
 		// get the latest block number from the current provider
-		providerBlockNumber, statusCode, err := s.getLatestBlockNumber(provider.HttpUrl, provider.Headers)
+		providerBlockNumber, statusCode, err := s.getLatestBlockNumber(provider.HttpUrl, provider.Headers, provider.AuthClient())
 		if err != nil {
 			// if there is an error getting the latest block number, mark the provider as a failure
 			// fmt.Println(err, "Error getting latest block number for provider", providerName, "on service", s.Name)
@@ -152,11 +153,11 @@ func (s *service) evaluateCheckedProviders() {
 	}
 }
 
-func (s *service) getLatestBlockNumber(httpUrl string, headers map[string]string) (int64, int, error) {
+func (s *service) getLatestBlockNumber(httpUrl string, headers map[string]string, ac auth.AuthClient) (int64, int, error) {
 	payload := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","method": "%s","params":[],"id":1}`, s.HCMethod))
 
 	// Send the POST request
-	resBytes, statusCode, err := s.HTTPClient.Post(httpUrl, headers, []byte(payload))
+	resBytes, statusCode, err := s.HTTPClient.Post(httpUrl, headers, []byte(payload), ac)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "Error sending POST request")
 	}
