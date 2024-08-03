@@ -9,6 +9,7 @@ import (
 	"time"
 
 	din_http "github.com/openrelayxyz/din-caddy-plugins/lib/http"
+	prom "github.com/openrelayxyz/din-caddy-plugins/lib/prometheus"
 	"github.com/pkg/errors"
 )
 
@@ -19,6 +20,7 @@ type service struct {
 	quit              chan struct{}
 	LatestBlockNumber int64 `json:"latest_block_number"`
 	HTTPClient        din_http.IHTTPClient
+	PrometheusClient  prom.IPrometheusClient
 
 	mu sync.RWMutex
 
@@ -60,11 +62,14 @@ func (s *service) healthCheck() {
 	// TODO: check all of the providers simultaneously using async job management for more accurate blocknumber results.
 	for _, provider := range s.Providers {
 		// get the latest block number from the current provider
+		reqStartTime := time.Now()
 		providerBlockNumber, statusCode, err := s.getLatestBlockNumber(provider.HttpUrl, provider.Headers)
+		latency := time.Since(reqStartTime)
 		if err != nil {
 			// if there is an error getting the latest block number, mark the provider as a failure
 			// fmt.Println(err, "Error getting latest block number for provider", providerName, "on service", s.Name)
 			provider.markPingFailure(s.HCThreshold)
+			s.sendLatestBlockMetric(provider.upstream.Dial, statusCode, latency, 0)
 			continue
 		}
 		blockTime = time.Now()
@@ -78,6 +83,7 @@ func (s *service) healthCheck() {
 				// if the status code is greater than 399, mark the provider as a failure
 				provider.markPingFailure(s.HCThreshold)
 			}
+			s.sendLatestBlockMetric(provider.upstream.Dial, statusCode, latency, 0)
 			continue
 		} else {
 			provider.markPingSuccess(s.HCThreshold)
@@ -102,9 +108,21 @@ func (s *service) healthCheck() {
 
 		// TODO: create a check based on time window of a provider's latest block number
 
+		s.sendLatestBlockMetric(provider.upstream.Dial, statusCode, latency, providerBlockNumber)
+
 		// add the current provider to the checked providers map
 		s.addHealthCheckToCheckedProviderList(provider.upstream.Dial, healthCheckEntry{blockNumber: providerBlockNumber, timestamp: &blockTime})
 	}
+}
+
+func (s *service) sendLatestBlockMetric(providerName string, statusCode int, latency time.Duration, blockNumber int64) {
+	s.PrometheusClient.HandleLatestBlockMetric(&prom.PromLatestBlockMetricData{
+		Service:     s.Name,
+		Provider:    providerName,
+		ResStatus:   statusCode,
+		ResLatency:  latency,
+		BlockNumber: strconv.FormatInt(blockNumber, 10),
+	})
 }
 
 func (s *service) getCheckedProviderHCList(providerName string) ([]healthCheckEntry, bool) {

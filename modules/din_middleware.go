@@ -47,9 +47,6 @@ func (DinMiddleware) CaddyModule() caddy.ModuleInfo {
 // Provision() is called by Caddy to prepare the middleware for use.
 // It is called only once, when the server is starting.
 func (d *DinMiddleware) Provision(context caddy.Context) error {
-	// Initialize the prometheus client on the din middleware object
-	d.PrometheusClient = prom.NewPrometheusClient()
-
 	// Initialize the HTTP client for each service and provider
 	httpClient := din_http.NewHTTPClient()
 	for _, service := range d.Services {
@@ -153,6 +150,9 @@ func (d *DinMiddleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 
 // UnmarshalCaddyfile sets up reverse proxy provider and method data on the serve based on the configuration of the Caddyfile
 func (d *DinMiddleware) UnmarshalCaddyfile(dispenser *caddyfile.Dispenser) error {
+	// Initialize the prometheus client on the din middleware object
+	promClient := prom.NewPrometheusClient()
+
 	var err error
 	if d.Services == nil {
 		d.Services = make(map[string]*service)
@@ -170,6 +170,7 @@ func (d *DinMiddleware) UnmarshalCaddyfile(dispenser *caddyfile.Dispenser) error
 					HCInterval:       DefaultHCInterval,
 					BlockLagLimit:    DefaultBlockLagLimit,
 					CheckedProviders: make(map[string][]healthCheckEntry),
+					PrometheusClient: promClient,
 				}
 
 				for nesting := dispenser.Nesting(); dispenser.NextBlock(nesting); {
