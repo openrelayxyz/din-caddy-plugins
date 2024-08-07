@@ -1,7 +1,9 @@
 package modules
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -92,18 +94,50 @@ func (d *DinMiddleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 	}
 
 	// Create a new response writer wrapper to capture the response body and status code
-	rww := NewResponseWriterWrapper(rw)
+	var rww *ResponseWriterWrapper
 
-	// Set the providers in the context for the selector to use
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	repl.Set(DinUpstreamsContextKey, service.Providers)
 
 	reqStartTime := time.Now()
 
-	// Serve the request
-	err := next.ServeHTTP(rww, r)
+	var err error
+	// Retry the request if it fails up to the max attempt request count
+	for attempt := 0; attempt < service.RequestAttemptCount; attempt++ {
+		rww = NewResponseWriterWrapper(rw)
+
+		// If the request fails, reset the request body to the original request body
+		if attempt > 0 {
+			var reqBody []byte
+			if v, ok := repl.Get(RequestBodyKey); ok {
+				reqBody = v.([]byte)
+			}
+			r.Body = io.NopCloser(bytes.NewReader(reqBody))
+		}
+
+		// Serve the request
+		err = next.ServeHTTP(rww, r)
+		if err == nil && rww.statusCode == http.StatusOK {
+			// If the request was successful, break out of the loop
+			break
+		}
+		// If the first attempt fails, log the failure and retry
+		// Log the retry attempt here if needed
+		// TODO: add logging via specifying levels using zap.Logger
+		// log.Printf("Retrying request to %s", r.RequestURI)
+	}
 	if err != nil {
 		return errors.Wrap(err, "Error serving HTTP")
+	}
+
+	// Write the response body and status to the original response writer
+	// This is done after the request is attempted multiple times if needed
+	if rww != nil {
+		rww.ResponseWriter.WriteHeader(rww.statusCode)
+		_, err = rw.Write(rww.body.Bytes())
+		if err != nil {
+			return errors.Wrap(err, "Error writing response body")
+		}
 	}
 
 	latency := time.Since(reqStartTime)
@@ -165,12 +199,13 @@ func (d *DinMiddleware) UnmarshalCaddyfile(dispenser *caddyfile.Dispenser) error
 				d.Services[serviceName] = &service{
 					Name: serviceName,
 					// Default health check values, to be overridden if specified in the Caddyfile
-					HCMethod:         DefaultHCMethod,
-					HCThreshold:      DefaultHCThreshold,
-					HCInterval:       DefaultHCInterval,
-					BlockLagLimit:    DefaultBlockLagLimit,
-					CheckedProviders: make(map[string][]healthCheckEntry),
-					Providers:        make(map[string]*provider),
+					HCMethod:            DefaultHCMethod,
+					HCThreshold:         DefaultHCThreshold,
+					HCInterval:          DefaultHCInterval,
+					BlockLagLimit:       DefaultBlockLagLimit,
+					RequestAttemptCount: DefaultRequestAttemptCount,
+					CheckedProviders:    make(map[string][]healthCheckEntry),
+					Providers:           make(map[string]*provider),
 				}
 				for nesting := dispenser.Nesting(); dispenser.NextBlock(nesting); {
 					switch dispenser.Val() {
@@ -235,6 +270,13 @@ func (d *DinMiddleware) UnmarshalCaddyfile(dispenser *caddyfile.Dispenser) error
 							return err
 						}
 						d.Services[serviceName].BlockLagLimit = int64(limit)
+					case "request_attempt_count":
+						dispenser.Next()
+						requestAttemptCount, err := strconv.Atoi(dispenser.Val())
+						if err != nil {
+							return err
+						}
+						d.Services[serviceName].RequestAttemptCount = requestAttemptCount
 					default:
 						return dispenser.Errf("unrecognized option: %s", dispenser.Val())
 					}

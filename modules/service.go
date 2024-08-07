@@ -23,11 +23,12 @@ type service struct {
 	mu sync.RWMutex
 
 	// Healthcheck configuration
-	CheckedProviders map[string][]healthCheckEntry `json:"checked_providers"`
-	HCMethod         string                        `json:"healthcheck_method"`
-	HCInterval       int                           `json:"healthceck_interval_seconds"`
-	HCThreshold      int                           `json:"healthcheck_threshold"`
-	BlockLagLimit    int64                         `json:"healthcheck_blocklag_limit"`
+	CheckedProviders    map[string][]healthCheckEntry `json:"checked_providers"`
+	HCMethod            string                        `json:"healthcheck_method"`
+	HCInterval          int                           `json:"healthcheck_interval_seconds"`
+	HCThreshold         int                           `json:"healthcheck_threshold"`
+	BlockLagLimit       int64                         `json:"healthcheck_blocklag_limit"`
+	RequestAttemptCount int                           `json:"request_attempt_count"`
 }
 
 func (s *service) startHealthcheck() {
