@@ -7,11 +7,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func TestHandleRequestMetric(t *testing.T) {
+
 	// Initialize the prometheus client
-	client := NewPrometheusClient()
+	client := NewPrometheusClient(zap.NewNop())
 
 	// Register metrics
 	RegisterMetrics()
